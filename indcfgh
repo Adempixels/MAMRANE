@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Bienvenido al mundo del profesor Amrane</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+      color: white;
+
+      /* HEIDI + CHEVRES EN FOND */
+      background: url("https://wallpapercave.com/wp/wp6991256.jpg") no-repeat center center fixed;
+      background-size: cover;
+    }
+
+    .overlay {
+      background: rgba(0, 0, 0, 0.65);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-top: 20px;
+      font-size: 32px;
+      text-shadow: 2px 2px 6px black;
+    }
+
+    .container {
+      background: rgba(0, 0, 0, 0.85);
+      padding: 30px;
+      border-radius: 15px;
+      width: 320px;
+      margin: 80px auto;
+    }
+
+    input,
+    button,
+    select {
+      padding: 10px;
+      margin: 10px;
+      width: 90%;
+      border-radius: 8px;
+      border: none;
+    }
+
+    button {
+      background: #2ecc71;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #27ae60;
+    }
+
+    .delete-btn {
+      background: #e74c3c;
+      width: auto;
+      padding: 5px 10px;
+    }
+
+    .delete-btn:hover {
+      background: #c0392b;
+    }
+
+    #dashboard {
+      display: none;
+    }
+
+    .file-box {
+      background: rgba(255, 255, 255, 0.15);
+      padding: 15px;
+      margin: 10px auto;
+      border-radius: 12px;
+      width: 80%;
+    }
+
+    .small {
+      opacity: 0.9;
+      font-size: 13px;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-size: 14px;
+      opacity: 0.95;
+    }
+  </style>
+
+  <!-- FIREBASE (compat pour HTML simple) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+
+<body>
+  <div class="overlay">
+    <!-- LOGIN -->
+    <div class="container" id="login">
+      <h2>🏔️ Connexion</h2>
+      <input type="text" id="username" placeholder="Identifiant" />
+      <input type="password" id="password" placeholder="Mot de passe" />
+      <button onclick="login()">Se connecter</button>
+      <p id="error" style="color: #ff6b6b;"></p>
+      <p class="small">Identifiant : <b>admin</b> — Mot de passe : <b>1234</b></p>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="dashboard">
+      <h1>Bienvenido al mundo del profesor Amrane</h1>
+
+      <input type="file" id="fileInput" />
+      <button onclick="saveFile()">Enregistrer</button>
+
+      <div class="status" id="status"></div>
+
+      <br />
+
+      <input type="text" id="search" placeholder="🔎 Rechercher..." onkeyup="loadFiles()" />
+
+      <select id="filterType" onchange="loadFiles()">
+        <option value="all">Tous</option>
+        <option value="audio">Audio</option>
+        <option value="video">Vidéo</option>
+        <option value="text">Texte</option>
+        <option value="image">Image</option>
+        <option value="other">Autres</option>
+      </select>
+
+      <h2>📁 Mes Fichiers</h2>
+      <div id="fileList"></div>
+
+      <button onclick="logout()">Se déconnecter</button>
+    </div>
+  </div>
+
+  <script>
+    // ✅ TON firebaseConfig (pas de import, version compat)
+    const firebaseConfig = {
+      apiKey: "AIzaSyCLEU9i1ta73fNGoPc9vvS87tqR6LVohJo",
+      authDomain: "profesor-amrane-final.firebaseapp.com",
+      databaseURL: "https://profesor-amrane-final-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "profesor-amrane-final",
+      storageBucket: "profesor-amrane-final.firebasestorage.app",
+      messagingSenderId: "554159219304",
+      appId: "1:554159219304:web:c578e4c09f6401207851dd",
+      measurementId: "G-TMZR0L8EQ4"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const filesRef = db.ref("files");
+
+    // LOGIN SIMPLE (comme avant)
+    const correctUsername = "admin";
+    const correctPassword = "1234";
+
+    function setStatus(msg) {
+      document.getElementById("status").innerText = msg || "";
+    }
+
+    function login() {
+      const user = document.getElementById("username").value.trim();
+      const pass = document.getElementById("password").value;
+
+      if (user === correctUsername && pass === correctPassword) {
+        document.getElementById("login").style.display = "none";
+        document.getElementById("dashboard").style.display = "block";
+        document.getElementById("error").innerText = "";
+        setStatus("✅ Connecté. Tu peux enregistrer un fichier.");
+        loadFiles();
+      } else {
+        document.getElementById("error").innerText = "Identifiant ou mot de passe incorrect";
+      }
+    }
+
+    function logout() {
+      document.getElementById("dashboard").style.display = "none";
+      document.getElementById("login").style.display = "block";
+      setStatus("");
+    }
+
+    function getFileType(mime, filename) {
+      const m = (mime || "").toLowerCase();
+      if (m.startsWith("audio/")) return "audio";
+      if (m.startsWith("video/")) return "video";
+      if (m.startsWith("text/")) return "text";
+      if (m.startsWith("image/")) return "image";
+
+      // fallback par extension
+      const name = (filename || "").toLowerCase();
+      if (name.endsWith(".txt") || name.endsWith(".pdf") || name.endsWith(".doc") || name.endsWith(".docx")) return "text";
+      if (name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".m4a")) return "audio";
+      if (name.endsWith(".mp4") || name.endsWith(".mov") || name.endsWith(".webm")) return "video";
+      if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".gif") || name.endsWith(".webp"))
+        return "image";
+
+      return "other";
+    }
+
+    // ✅ Enregistrement 100% gratuit: base64 en Realtime Database
+    function saveFile() {
+      const input = document.getElementById("fileInput");
+      const file = input.files && input.files[0];
+
+      if (!file) {
+        alert("Choisis un fichier !");
+        return;
+      }
+
+      // Limite pour éviter que la DB explose (Realtime DB n'est pas faite pour gros fichiers)
+      const MAX_BYTES = 2 * 1024 * 1024; // 2MB
+      if (file.size > MAX_BYTES) {
+        alert("Fichier trop gros (max 2MB en version 100% gratuite).");
+        return;
+      }
+
+      setStatus("⏳ Enregistrement en cours...");
+
+      const reader = new FileReader();
+      reader.onerror = () => {
+        setStatus("");
+        alert("Erreur de lecture du fichier.");
+      };
+
+      reader.onload = function (e) {
+        const dataUrl = e.target.result;
+        const type = getFileType(file.type, file.name);
+
+        filesRef
+          .push({
+            name: file.name,
+            data: dataUrl,
+            mime: file.type || "",
+            type: type,
+            createdAt: Date.now()
+          })
+          .then(() => {
+            input.value = "";
+            setStatus("✅ Fichier enregistré !");
+            loadFiles();
+          })
+          .catch((err) => {
+            console.error(err);
+            setStatus("");
+            alert("Erreur Firebase (vérifie les Rules de Realtime Database).");
+          });
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    function loadFiles() {
+      const fileList = document.getElementById("fileList");
+      const search = document.getElementById("search").value.toLowerCase();
+      const filter = document.getElementById("filterType").value;
+
+      fileList.innerHTML = "";
+      setStatus("");
+
+      filesRef
+        .orderByChild("createdAt")
+        .once("value")
+        .then((snapshot) => {
+          const items = [];
+          snapshot.forEach((child) => {
+            items.push({ key: child.key, ...child.val() });
+          });
+
+          // du plus récent au plus ancien
+          items.reverse();
+
+          items.forEach((file) => {
+            const name = file.name || "Sans nom";
+            const type = file.type || "other";
+            const matchSearch = name.toLowerCase().includes(search);
+            const matchFilter = filter === "all" || type === filter;
+
+            if (!matchSearch || !matchFilter) return;
+
+            const div = document.createElement("div");
+            div.className = "file-box";
+            div.innerHTML = `
+              <p><strong>${escapeHtml(name)}</strong> <span class="small">(${escapeHtml(type)})</span></p>
+              <a href="${file.data}" download="${escapeAttr(name)}">
+                <button>Télécharger</button>
+              </a>
+              <button class="delete-btn" onclick="deleteFile('${file.key}')">🗑️</button>
+            `;
+            fileList.appendChild(div);
+          });
+
+          if (!fileList.children.length) {
+            fileList.innerHTML = `<p class="small">Aucun fichier trouvé.</p>`;
+          }
+        })
+        .catch((err) => {
+          console.error(err);
+          alert("Erreur de lecture Firebase (vérifie les Rules).");
+        });
+    }
+
+    function deleteFile(key) {
+      if (!confirm("Êtes-vous sûr de supprimer ce fichier ?")) return;
+
+      filesRef
+        .child(key)
+        .remove()
+        .then(() => loadFiles())
+        .catch((err) => {
+          console.error(err);
+          alert("Erreur suppression Firebase.");
+        });
+    }
+
+    // helpers anti-bug HTML
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m]));
+    }
+    function escapeAttr(str) {
+      return String(str).replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>
